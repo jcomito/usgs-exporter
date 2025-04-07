@@ -58,29 +58,33 @@ def fetch_usgs():
             param = str(series["variable"]["variableCode"][0]["value"])
             site_name = series["sourceInfo"].get("siteName", "unknown")
 
+            # Flatten all value blocks into one list
             values = []
             for value_block in series.get("values", []):
                 values.extend(value_block.get("value", []))
 
             if values:
-                val_str = values[-1].get("value")
+                # Pick the value with the most recent timestamp
+                latest = max(values, key=lambda v: v.get("dateTime", ""))
+                val_str = latest.get("value")
+                timestamp = latest.get("dateTime", "unknown")
+
                 if val_str and val_str != "-999999":
                     try:
                         val = float(val_str)
                         if param in gauges:
-                            gauges[param].labels(site=SITE_ID, site_name=site_name).set(
-                                val
-                            )
-                            logging.info(
-                                f"Set {param} = {val} for site {SITE_ID} ({site_name})"
-                            )
+                            gauges[param].labels(site=SITE_ID, site_name=site_name).set(val)
+                            logging.info(f"Set {param} = {val} at {timestamp} for site {SITE_ID} ({site_name})")
                     except ValueError:
                         logging.warning(f"Invalid float value for {param}: {val_str}")
+                else:
+                    logging.warning(f"No valid value for {param} (latest = {val_str})")
             else:
                 logging.warning(f"No data for param {param}")
 
     except Exception as e:
         logging.error(f"Error fetching/parsing USGS data: {e}")
+
 
 
 @app.route("/metrics")
